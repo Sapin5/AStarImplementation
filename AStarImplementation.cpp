@@ -8,6 +8,7 @@
 #include <thread>
 #include <conio.h>
 #include <algorithm>
+#include <Windows.h>
 
 const int rows{ 10 };
 const int columns{ 10 };
@@ -18,6 +19,19 @@ struct coordinate {
     int y{};
 };
 
+const short checkOS() {
+    short OS{};
+    #if defined(_WIN32)
+        OS = 0;
+    #elif defined(__APPLE__) || defined(__MACH__)
+        OS = 1;
+    #elif defined(__linux__)
+        OS = 2;
+    #else
+        OS = 3;
+    #endif
+    return OS;
+}
 
 void printGrid(std::array<std::array<int, rows>, columns>& grid, coordinate& p, coordinate& g) {
     //std::string grid = "";
@@ -44,7 +58,7 @@ void printGrid(std::array<std::array<int, rows>, columns>& grid, coordinate& p, 
     std::cout << "\r" << std::flush << std::endl;
 }
 
-void moveAround(coordinate& p) {
+void moveAround(coordinate& p, bool traverse) {
     int c = _getch();
 
     // Check for arrow key prefix (0 or 224)
@@ -70,6 +84,32 @@ void moveAround(coordinate& p) {
     }
 }
 
+void moveCursor(coordinate& cursor) {
+    int c = _getch();
+
+    // Check for arrow key prefix (0 or 224)
+    if (c == 0 || c == 224) {
+        c = _getch(); // Get the actual key code
+        switch (c) {
+        case 72: // Up
+            cursor.y = std::clamp(cursor.y - 1, 0, rows-1);
+            break;
+        case 80: // Down
+            cursor.y = std::clamp(cursor.y + 1, 0, rows-1);
+            break;
+        case 75: // Left
+            cursor.x = std::clamp(cursor.x - 1 - spacing, 2, columns * 2);
+            break;
+        case 77: // Right
+            cursor.x = std::clamp(cursor.x + 1 + spacing, 2, columns * 2);
+            break;
+        }
+    }
+    else if (c == 27) { // Escape key
+        std::exit(0);
+    }
+}
+
 bool checkPosition(coordinate& p, coordinate& g) {
     if (p.x == g.x && p.y == g.y) {
         std::cout << "YOU WIN" << std::endl;
@@ -82,21 +122,40 @@ void aStarSearch(coordinate& p, coordinate& g, std::array<std::array<int, rows>,
 
 }
 
+void gotoxy(short int x, short int y) {
+    HANDLE hStdOut = ::GetStdHandle(STD_OUTPUT_HANDLE);
+    COORD position { x, y };
+    ::SetConsoleCursorPosition(hStdOut, position);
+}
+
 int main()
 {
-    bool play{ true };
-    srand(time(0));
-    std::array<std::array<int, rows>, columns> grid = {};
-    coordinate playerPos{ 0, 0 };
-    coordinate goal{ rand() % rows, rand() % columns };
+    if (checkOS() == 0) {
+        bool play{ true };
+        srand(time(0));
+        std::array<std::array<int, rows>, columns> grid = {};
+        coordinate playerPos{ 0, 0 };
+        coordinate goal{ rand() % rows, rand() % columns };
+        coordinate cursorLoc{ 2, 0 };
 
-    while (play) {
-        if (!checkPosition(playerPos, goal)) break;
-        printGrid(grid, playerPos, goal);
+        while (play) {
+            if (!checkPosition(playerPos, goal)) break;
+            system("cls");
+            printGrid(grid, playerPos, goal);
+            gotoxy(cursorLoc.x, cursorLoc.y);
+            moveCursor(cursorLoc);
+            //aStarSearch(playerPos, goal, grid);
+            
+            //moveAround(playerPos);
+
+            // system("cls");
+        }
         
-        aStarSearch(playerPos, goal, grid);
-        moveAround(playerPos);
     }
+    else {
+        std::cout << "This program currently only runs on windows, sorry";
+    }
+
 }
 
 // Run program: Ctrl + F5 or Debug > Start Without Debugging menu
