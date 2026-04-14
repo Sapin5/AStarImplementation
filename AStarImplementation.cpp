@@ -9,16 +9,101 @@
 #include <conio.h>
 #include <algorithm>
 #include <Windows.h>
+#include <map>
 
 const int rows{ 10 };
 const int columns{ 10 };
 const int spacing{ 1 };
+const int wall{ 3 };
+const int player{ 1 };
+const int goal{ 2 };
+bool placeWalls{ false };
+const int trueRowLength = rows - 1;
+const int trueColLength = columns - 1;
+const int stepSize{ 1 };
+const int consoleStepSize{ 2 };
+
+// I hate this
+struct KeyBindings {
+    static constexpr int Space = 32;
+    static constexpr int Enter[2] = { 13, 10 };
+    static constexpr int Up = 72;
+    static constexpr int Down = 80;
+    static constexpr int Left = 75;
+    static constexpr int Right = 77;
+    static constexpr int Escape = 27;
+    static constexpr int ArrowPrefix[2] = { 0, 224 };
+};
+
+
+/* cant use this beacuase switch statement wants a constexpr int 
+const std::map<std::string, std::vector<const int>> keys = {
+    {"Space",  {32}},
+    {"Enter",  {13, 10}},
+    {"Up",     {72}},
+    {"Down",   {80}},
+    {"Left",   {75}},
+    {"Right",  {77}},
+    {"Escape", {27}}
+};
+*/
+
+/*
+* To Do
+* Get rid of all magic numbers <- I dont want to do this. Code is art and should be left to interpertation
+* Implement game state change from wall placement to map traversal
+* Astar algorithm
+* Change the OS check to use an Enum for easier readibility (theres way too many 0s0
+*/
 
 struct coordinate {
     int x{};
     int y{};
+
+    // ask ivan why this was required to be made const. I may be stupid 
+    bool compareValue(coordinate& other) const {
+        return (this->x == other.x && this->y == other.y) ? true : false;
+    }
+
+    void moveUpNormal(bool adjustForVisual = true) {
+        if (adjustForVisual) {
+            this->x = std::clamp(this->x - stepSize, 0, trueRowLength);
+        }
+        else {
+            this->y = std::clamp(this->y - stepSize, 0, trueRowLength);
+        }
+    }
+    void moveDownNormal(bool adjustForVisual = true) {
+        if (adjustForVisual) {
+            this->x = std::clamp(this->x + stepSize, 0, trueRowLength);
+        }
+        else {
+            this->y = std::clamp(this->y + stepSize, 0, trueRowLength);
+        }
+    }
+
+    void moveLeftNormal(bool adjustForVisual = true) {
+        if (adjustForVisual) {
+            this->y = std::clamp(this->y - stepSize, 0, trueColLength);
+        }
+        else {
+            this->x = std::clamp(this->x - stepSize - spacing, consoleStepSize, columns * consoleStepSize);
+        }
+    }
+
+    void moveRightNormal(bool adjustForVisual = true) {
+        // this would be funny if it worked
+        // this-> (adustforVisual) ? y = std::clamp(this->y + stepSize, 0, trueColLength): x = std::clamp(this->x + stepSize + spacing, consoleStepSize, columns * consoleStepSize);;
+        if (adjustForVisual) {
+            this->y = std::clamp(this->y + stepSize, 0, trueColLength);
+        }
+        else {
+            this->x = std::clamp(this->x + stepSize + spacing, consoleStepSize, columns * consoleStepSize);
+        }
+    }
 };
 
+// Potentially add support for Unix and MacOS cause why not. (JK im a lazy)S
 const short checkOS() {
     short OS{};
     #if defined(_WIN32)
@@ -33,8 +118,20 @@ const short checkOS() {
     return OS;
 }
 
+
+void gotoxy(short int x, short int y) {
+    HANDLE hStdOut = ::GetStdHandle(STD_OUTPUT_HANDLE);
+    COORD position{ x, y };
+    ::SetConsoleCursorPosition(hStdOut, position);
+}
+
+void exitProgram() {
+    gotoxy(0, rows + 10);
+    std::exit(0);
+}
+
 void printGrid(std::array<std::array<int, rows>, columns>& grid, coordinate& p, coordinate& g) {
-    //std::string grid = "";
+
     for (int i = 0; i < grid.size() * grid[0].size(); i++) {
         
         int row = i / grid.size() ;
@@ -42,13 +139,13 @@ void printGrid(std::array<std::array<int, rows>, columns>& grid, coordinate& p, 
         
         
         if (row == p.x && column == p.y) {
-            grid[row][column] = 1;
+            grid[row][column] = player;
         }
         else if (row == g.x && column == g.y) {
-            grid[row][column] = 2;
+            grid[row][column] = goal;
         }
 
-        std::cout << std::setw(spacing) << " " << grid[row][column];
+        std::cout << std::setw(spacing) << " " << grid[row][column]; 
 
         // Visual studio kept yelling at me to cast this because overflow or smthn
         if (static_cast<int16_t>( 1 + i ) % grid.size() == 0) std::cout << "\n";
@@ -58,60 +155,80 @@ void printGrid(std::array<std::array<int, rows>, columns>& grid, coordinate& p, 
     std::cout << "\r" << std::flush << std::endl;
 }
 
-void moveAround(coordinate& p, bool traverse) {
-    int c = _getch();
+void moveAround(coordinate& p) {
 
-    // Check for arrow key prefix (0 or 224)
-    if (c == 0 || c == 224) {
-        c = _getch(); // Get the actual key code
-        switch (c) {
-        case 72: // Up
-            p.x = std::clamp(p.x - 1, 0, rows - 1);
-            break;
-        case 80: // Down
-            p.x = std::clamp(p.x + 1, 0, rows - 1);
-            break;
-        case 75: // Left
-            p.y = std::clamp(p.y - 1, 0, columns - 1);
-            break;
-        case 77: // Right
-            p.y = std::clamp(p.y + 1, 0, columns - 1);
-            break;
+    if (placeWalls) {
+        int c = _getch();
+
+        if (c == KeyBindings::ArrowPrefix[0] || c == KeyBindings::ArrowPrefix[1]) {
+            c = _getch(); 
+            switch (c) {
+            case  KeyBindings::Up: 
+                p.moveUpNormal();
+                break;
+            case  KeyBindings::Down:
+                p.moveDownNormal();
+                break;
+            case  KeyBindings::Left: 
+                p.moveLeftNormal();
+                break;
+            case  KeyBindings::Right:
+                p.moveRightNormal();
+                break;
+            }
         }
-    }
-    else if (c == 27) { // Escape key
-        std::exit(0);
+        else if (c == KeyBindings::Escape) {
+            exitProgram();
+        }
     }
 }
 
-void moveCursor(coordinate& cursor) {
-    int c = _getch();
 
-    // Check for arrow key prefix (0 or 224)
-    if (c == 0 || c == 224) {
-        c = _getch(); // Get the actual key code
-        switch (c) {
-        case 72: // Up
-            cursor.y = std::clamp(cursor.y - 1, 0, rows-1);
-            break;
-        case 80: // Down
-            cursor.y = std::clamp(cursor.y + 1, 0, rows-1);
-            break;
-        case 75: // Left
-            cursor.x = std::clamp(cursor.x - 1 - spacing, 2, columns * 2);
-            break;
-        case 77: // Right
-            cursor.x = std::clamp(cursor.x + 1 + spacing, 2, columns * 2);
-            break;
+void moveCursor(std::array<std::array<int, rows>, columns>& grid, coordinate& cursor, coordinate& arrayTraverer, coordinate& goal, coordinate& playerPos) {
+
+    if (!placeWalls) {
+        int c = _getch();
+
+        if (c == KeyBindings::ArrowPrefix[0] || c == KeyBindings::ArrowPrefix[1]) {
+
+            c = _getch();
+            switch (c) {
+            case KeyBindings::Up:
+                cursor.moveUpNormal(false);
+                arrayTraverer.moveUpNormal();
+                break;
+            case KeyBindings::Down:
+                cursor.moveDownNormal(false);
+                arrayTraverer.moveDownNormal();
+                break;
+            case KeyBindings::Left:
+                cursor.moveLeftNormal(false);
+                arrayTraverer.moveLeftNormal();
+                break;
+            case KeyBindings::Right:
+                cursor.moveRightNormal(false);
+                arrayTraverer.moveRightNormal();
+                break;
+            }
+
         }
-    }
-    else if (c == 27) { // Escape key
-        std::exit(0);
+        else if (c == KeyBindings::Space) {
+            if (!arrayTraverer.compareValue(goal) && !arrayTraverer.compareValue(playerPos)) {
+                grid[arrayTraverer.x][arrayTraverer.y] = wall;
+            }
+        }
+        else if (c == KeyBindings::Enter[0] || c == KeyBindings::Enter[1]) {
+            placeWalls = true;
+        }
+        else if (c == KeyBindings::Escape) {
+            exitProgram();
+        }
     }
 }
 
 bool checkPosition(coordinate& p, coordinate& g) {
     if (p.x == g.x && p.y == g.y) {
+        gotoxy(0, rows + 2);
         std::cout << "YOU WIN" << std::endl;
         return false;
     }
@@ -122,31 +239,27 @@ void aStarSearch(coordinate& p, coordinate& g, std::array<std::array<int, rows>,
 
 }
 
-void gotoxy(short int x, short int y) {
-    HANDLE hStdOut = ::GetStdHandle(STD_OUTPUT_HANDLE);
-    COORD position { x, y };
-    ::SetConsoleCursorPosition(hStdOut, position);
-}
+
 
 int main()
 {
     if (checkOS() == 0) {
         bool play{ true };
         srand(time(0));
-        std::array<std::array<int, rows>, columns> grid = {};
+        std::array<std::array<int, rows>, columns> grid = {}; // Maze Grid
         coordinate playerPos{ 0, 0 };
         coordinate goal{ rand() % rows, rand() % columns };
-        coordinate cursorLoc{ 2, 0 };
+        coordinate cursorLoc{ consoleStepSize, 0 };
+        coordinate arrayTraverser{ 0, 0 };
 
         while (play) {
             if (!checkPosition(playerPos, goal)) break;
             system("cls");
             printGrid(grid, playerPos, goal);
             gotoxy(cursorLoc.x, cursorLoc.y);
-            moveCursor(cursorLoc);
+            moveCursor(grid, cursorLoc, arrayTraverser, goal, playerPos);
             //aStarSearch(playerPos, goal, grid);
-            
-            //moveAround(playerPos);
+            moveAround(playerPos);
 
             // system("cls");
         }
@@ -155,7 +268,7 @@ int main()
     else {
         std::cout << "This program currently only runs on windows, sorry";
     }
-
+    return 0;
 }
 
 // Run program: Ctrl + F5 or Debug > Start Without Debugging menu
