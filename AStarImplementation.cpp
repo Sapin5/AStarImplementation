@@ -9,7 +9,6 @@
 #include <conio.h>
 #include <algorithm>
 #include <Windows.h>
-#include <map>
 
 const int rows{ 10 };
 const int columns{ 10 };
@@ -18,8 +17,8 @@ const int wall{ 3 };
 const int player{ 1 };
 const int goal{ 2 };
 bool placeWalls{ false };
-const int trueRowLength = rows - 1;
-const int trueColLength = columns - 1;
+const int trueRowLength{ rows - 1 };
+const int trueColLength{ columns - 1 };
 const int stepSize{ 1 };
 const int consoleStepSize{ 2 };
 
@@ -53,7 +52,7 @@ const std::map<std::string, std::vector<const int>> keys = {
 * Get rid of all magic numbers <- I dont want to do this. Code is art and should be left to interpertation
 * Implement game state change from wall placement to map traversal
 * Astar algorithm
-* Change the OS check to use an Enum for easier readibility (theres way too many 0s0
+* Change the OS check to use an Enum for easier readibility (theres way too many 0s
 */
 
 struct coordinate {
@@ -62,48 +61,30 @@ struct coordinate {
 
     // ask ivan why this was required to be made const. I may be stupid 
     bool compareValue(coordinate& other) const {
-        return (this->x == other.x && this->y == other.y) ? true : false;
+        return (this->x == other.x && this->y == other.y);
     }
 
     void moveUpNormal(bool adjustForVisual = true) {
-        if (adjustForVisual) {
-            this->x = std::clamp(this->x - stepSize, 0, trueRowLength);
-        }
-        else {
-            this->y = std::clamp(this->y - stepSize, 0, trueRowLength);
-        }
+        (adjustForVisual) ? this->x = std::clamp(this->x - stepSize, 0, trueRowLength) : 
+                            this->y = std::clamp(this->y - stepSize, 0, trueRowLength);
     }
     void moveDownNormal(bool adjustForVisual = true) {
-        if (adjustForVisual) {
-            this->x = std::clamp(this->x + stepSize, 0, trueRowLength);
-        }
-        else {
-            this->y = std::clamp(this->y + stepSize, 0, trueRowLength);
-        }
+        (adjustForVisual) ? this->x = std::clamp(this->x + stepSize, 0, trueRowLength) :
+                            this->y = std::clamp(this->y + stepSize, 0, trueRowLength);
     }
 
     void moveLeftNormal(bool adjustForVisual = true) {
-        if (adjustForVisual) {
-            this->y = std::clamp(this->y - stepSize, 0, trueColLength);
-        }
-        else {
-            this->x = std::clamp(this->x - stepSize - spacing, consoleStepSize, columns * consoleStepSize);
-        }
+        (adjustForVisual) ? this->y = std::clamp(this->y - stepSize, 0, trueColLength) :
+                            this->x = std::clamp(this->x - stepSize - spacing, consoleStepSize, columns * consoleStepSize);
     }
 
     void moveRightNormal(bool adjustForVisual = true) {
-        // this would be funny if it worked
-        // this-> (adustforVisual) ? y = std::clamp(this->y + stepSize, 0, trueColLength): x = std::clamp(this->x + stepSize + spacing, consoleStepSize, columns * consoleStepSize);;
-        if (adjustForVisual) {
-            this->y = std::clamp(this->y + stepSize, 0, trueColLength);
-        }
-        else {
-            this->x = std::clamp(this->x + stepSize + spacing, consoleStepSize, columns * consoleStepSize);
-        }
+        (adjustForVisual) ? this->y = std::clamp(this->y + stepSize, 0, trueColLength) : 
+                            this->x = std::clamp(this->x + stepSize + spacing, consoleStepSize, columns * consoleStepSize);
     }
 };
 
-// Potentially add support for Unix and MacOS cause why not. (JK im a lazy)S
+// Potentially add support for Unix and MacOS cause why not. (JK im a lazy)
 const short checkOS() {
     short OS{};
     #if defined(_WIN32)
@@ -124,6 +105,7 @@ void gotoxy(short int x, short int y) {
     COORD position{ x, y };
     ::SetConsoleCursorPosition(hStdOut, position);
 }
+
 
 void exitProgram() {
     gotoxy(0, rows + 10);
@@ -155,7 +137,12 @@ void printGrid(std::array<std::array<int, rows>, columns>& grid, coordinate& p, 
     std::cout << "\r" << std::flush << std::endl;
 }
 
-void moveAround(coordinate& p) {
+void moveAround(coordinate& p, std::array<std::array<int, rows>, columns>& grid) {
+
+    bool CanMoveUp    = grid[std::clamp(p.x - stepSize, 0, trueRowLength)][p.y] != 3;
+    bool CanMoveDown  = grid[std::clamp(p.x + stepSize, 0, trueRowLength)][p.y] != 3;
+    bool CanMoveLeft  = grid[p.x][std::clamp(p.y - stepSize, 0, trueColLength)] != 3;
+    bool CanMoveRight = grid[p.x][std::clamp(p.y + stepSize, 0, trueColLength)] != 3;
 
     if (placeWalls) {
         int c = _getch();
@@ -163,23 +150,35 @@ void moveAround(coordinate& p) {
         if (c == KeyBindings::ArrowPrefix[0] || c == KeyBindings::ArrowPrefix[1]) {
             c = _getch(); 
             switch (c) {
-            case  KeyBindings::Up: 
-                p.moveUpNormal();
+            case  KeyBindings::Up:
+                if (CanMoveUp) {
+                    p.moveUpNormal();
+                }
                 break;
             case  KeyBindings::Down:
-                p.moveDownNormal();
+                if (CanMoveDown) {
+                    p.moveDownNormal();
+                }
                 break;
-            case  KeyBindings::Left: 
-                p.moveLeftNormal();
+            case  KeyBindings::Left:
+                if (CanMoveLeft) {
+                    p.moveLeftNormal();
+                }
                 break;
             case  KeyBindings::Right:
-                p.moveRightNormal();
+                if (CanMoveRight) {
+                    p.moveRightNormal();
+                }
                 break;
             }
         }
         else if (c == KeyBindings::Escape) {
             exitProgram();
         }
+    }
+
+    if (!CanMoveUp && !CanMoveDown && !CanMoveLeft && !CanMoveRight) {
+        std::exit(0);
     }
 }
 
@@ -235,10 +234,31 @@ bool checkPosition(coordinate& p, coordinate& g) {
     return true;
 }
 
+// Manhattan distance between player and goal
+// D represents cost of moving around
+
+// heuristic *= (1.0 + p) <- The p will help break the tie and select a path if there are multiple
+// p should be less than the (minimum cost of taking one step) / (expected maximum path length)
+
+/*
+* This Will cause the heuristic to prefer stright lines over the curves
+* dx1 = current.x - goal.x
+* dy1 = current.y - goal.y
+* dx2 = start.x - goal.x
+* dy2 = start.y - goal.y
+* cross = abs(dx1*dy2 - dx2*dy1)
+* heuristic += cross*0.001
+*/
+int heuristic(coordinate& p, coordinate& g) {
+    int D = 1; // Cost of moving, Cost is determined  
+    int dx = abs(p.x - g.x);
+    int dy = abs(p.y - g.y);
+    return D * (dx + dy);
+}
+
 void aStarSearch(coordinate& p, coordinate& g, std::array<std::array<int, rows>, columns>& grid) {
 
 }
-
 
 
 int main()
@@ -259,9 +279,7 @@ int main()
             gotoxy(cursorLoc.x, cursorLoc.y);
             moveCursor(grid, cursorLoc, arrayTraverser, goal, playerPos);
             //aStarSearch(playerPos, goal, grid);
-            moveAround(playerPos);
-
-            // system("cls");
+            moveAround(playerPos, grid);
         }
         
     }
@@ -273,11 +291,3 @@ int main()
 
 // Run program: Ctrl + F5 or Debug > Start Without Debugging menu
 // Debug program: F5 or Debug > Start Debugging menu
-
-// Tips for Getting Started: 
-//   1. Use the Solution Explorer window to add/manage files
-//   2. Use the Team Explorer window to connect to source control
-//   3. Use the Output window to see build output and other messages
-//   4. Use the Error List window to view errors
-//   5. Go to Project > Add New Item to create new code files, or Project > Add Existing Item to add existing code files to the project
-//   6. In the future, to open this project again, go to File > Open > Project and select the .sln file
