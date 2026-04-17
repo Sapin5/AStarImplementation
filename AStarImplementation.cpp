@@ -35,6 +35,12 @@ struct KeyBindings {
 };
 
 
+struct Cell {
+    int id{ 0 };
+    std::string type;
+    int weight{ 0 };
+};
+
 /* cant use this beacuase switch statement wants a constexpr int 
 const std::map<std::string, std::vector<const int>> keys = {
     {"Space",  {32}},
@@ -112,7 +118,7 @@ void exitProgram() {
     std::exit(0);
 }
 
-void printGrid(std::array<std::array<int, rows>, columns>& grid, coordinate& p, coordinate& g) {
+void printGrid(std::array<std::array<Cell, rows>, columns>& grid, coordinate& p, coordinate& g) {
 
     for (int i = 0; i < grid.size() * grid[0].size(); i++) {
         
@@ -121,13 +127,13 @@ void printGrid(std::array<std::array<int, rows>, columns>& grid, coordinate& p, 
         
         
         if (row == p.x && column == p.y) {
-            grid[row][column] = player;
+            grid[row][column].id = player;
         }
         else if (row == g.x && column == g.y) {
-            grid[row][column] = goal;
+            grid[row][column].id = goal;
         }
 
-        std::cout << std::setw(spacing) << " " << grid[row][column]; 
+        std::cout << std::setw(spacing) << " " << grid[row][column].id; 
 
         // Visual studio kept yelling at me to cast this because overflow or smthn
         if (static_cast<int16_t>( 1 + i ) % grid.size() == 0) std::cout << "\n";
@@ -137,12 +143,12 @@ void printGrid(std::array<std::array<int, rows>, columns>& grid, coordinate& p, 
     std::cout << "\r" << std::flush << std::endl;
 }
 
-void moveAround(coordinate& p, std::array<std::array<int, rows>, columns>& grid) {
+void moveAround(coordinate& p, std::array<std::array<Cell, rows>, columns>& grid) {
 
-    bool CanMoveUp    = grid[std::clamp(p.x - stepSize, 0, trueRowLength)][p.y] != 3;
-    bool CanMoveDown  = grid[std::clamp(p.x + stepSize, 0, trueRowLength)][p.y] != 3;
-    bool CanMoveLeft  = grid[p.x][std::clamp(p.y - stepSize, 0, trueColLength)] != 3;
-    bool CanMoveRight = grid[p.x][std::clamp(p.y + stepSize, 0, trueColLength)] != 3;
+    bool CanMoveUp    = grid[std::clamp(p.x - stepSize, 0, trueRowLength)][p.y].id != 3;
+    bool CanMoveDown  = grid[std::clamp(p.x + stepSize, 0, trueRowLength)][p.y].id != 3;
+    bool CanMoveLeft  = grid[p.x][std::clamp(p.y - stepSize, 0, trueColLength)].id != 3;
+    bool CanMoveRight = grid[p.x][std::clamp(p.y + stepSize, 0, trueColLength)].id != 3;
 
     if (placeWalls) {
         int c = _getch();
@@ -183,7 +189,7 @@ void moveAround(coordinate& p, std::array<std::array<int, rows>, columns>& grid)
 }
 
 
-void moveCursor(std::array<std::array<int, rows>, columns>& grid, coordinate& cursor, coordinate& arrayTraverer, coordinate& goal, coordinate& playerPos) {
+void moveCursor(std::array<std::array<Cell, rows>, columns>& grid, coordinate& cursor, coordinate& arrayTraverer, coordinate& goal, coordinate& playerPos) {
 
     if (!placeWalls) {
         int c = _getch();
@@ -213,7 +219,7 @@ void moveCursor(std::array<std::array<int, rows>, columns>& grid, coordinate& cu
         }
         else if (c == KeyBindings::Space) {
             if (!arrayTraverer.compareValue(goal) && !arrayTraverer.compareValue(playerPos)) {
-                grid[arrayTraverer.x][arrayTraverer.y] = wall;
+                grid[arrayTraverer.x][arrayTraverer.y].id = wall;
             }
         }
         else if (c == KeyBindings::Enter[0] || c == KeyBindings::Enter[1]) {
@@ -256,6 +262,17 @@ int heuristic(coordinate& p, coordinate& g) {
     return D * (dx + dy);
 }
 
+std::vector<coordinate> neighbors(coordinate& node, std::array<std::array<Cell, rows>, columns>& grid) {
+
+    int nearestCells[4][2] = { {1, 0}, {0, 1}, {-1, 0}, {0, -1} };
+    std::vector<coordinate> results;
+    for (auto& test : nearestCells) {
+        coordinate neighbour = { test[0] + node.x, test[1] + node.y};
+        if (0 <= neighbour.x  && neighbour.x < columns && 0 <= neighbour.y && neighbour.y < rows) results.push_back(neighbour);
+    }
+    return results;
+}
+
 void aStarSearch(coordinate& p, coordinate& g, std::array<std::array<int, rows>, columns>& grid) {
 
 }
@@ -266,7 +283,9 @@ int main()
     if (checkOS() == 0) {
         bool play{ true };
         srand(time(0));
-        std::array<std::array<int, rows>, columns> grid = {}; // Maze Grid
+
+        std::array<std::array<Cell, rows>, columns> grid = {}; // Maze Grid
+
         coordinate playerPos{ 0, 0 };
         coordinate goal{ rand() % rows, rand() % columns };
         coordinate cursorLoc{ consoleStepSize, 0 };
