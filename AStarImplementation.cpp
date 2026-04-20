@@ -1,4 +1,4 @@
-// AStarImplementation.cpp : This file contains the 'main' function. Program execution begins and ends there.
+﻿// AStarImplementation.cpp : This file contains the 'main' function. Program execution begins and ends there.
 //
 
 #include <iostream>
@@ -9,6 +9,7 @@
 #include <conio.h>
 #include <algorithm>
 #include <Windows.h>
+#include <list>
 
 const int rows{ 10 };
 const int columns{ 10 };
@@ -34,24 +35,14 @@ struct KeyBindings {
     static constexpr int ArrowPrefix[2] = { 0, 224 };
 };
 
-
-struct Cell {
-    int id{ 0 };
-    std::string type;
-    int weight{ 0 };
+enum CellType {
+    EMPTY,
+    PLAYER,
+    GOAL,
+    WALL
 };
 
-/* cant use this beacuase switch statement wants a constexpr int 
-const std::map<std::string, std::vector<const int>> keys = {
-    {"Space",  {32}},
-    {"Enter",  {13, 10}},
-    {"Up",     {72}},
-    {"Down",   {80}},
-    {"Left",   {75}},
-    {"Right",  {77}},
-    {"Escape", {27}}
-};
-*/
+
 
 /*
 * To Do
@@ -90,6 +81,15 @@ struct coordinate {
     }
 };
 
+
+struct Cell {
+    int id{ 0 };
+    CellType type{ EMPTY }; // string -> enum. Changed because this will likely work better for reading wall types 
+    coordinate loc{};
+    int weight{ 0 }; // Not needed due to simple implementation?
+};
+
+
 // Potentially add support for Unix and MacOS cause why not. (JK im a lazy)
 const short checkOS() {
     short OS{};
@@ -118,22 +118,15 @@ void exitProgram() {
     std::exit(0);
 }
 
-void printGrid(std::array<std::array<Cell, rows>, columns>& grid, coordinate& p, coordinate& g) {
+void printGrid(std::array<std::array<Cell, rows>, columns>& grid) {
 
     for (int i = 0; i < grid.size() * grid[0].size(); i++) {
         
         int row = i / grid.size() ;
         int column = i % grid[0].size();
-        
-        
-        if (row == p.x && column == p.y) {
-            grid[row][column].id = player;
-        }
-        else if (row == g.x && column == g.y) {
-            grid[row][column].id = goal;
-        }
+       
 
-        std::cout << std::setw(spacing) << " " << grid[row][column].id; 
+        std::cout << std::setw(spacing) << " " << grid[row][column].type;
 
         // Visual studio kept yelling at me to cast this because overflow or smthn
         if (static_cast<int16_t>( 1 + i ) % grid.size() == 0) std::cout << "\n";
@@ -145,10 +138,10 @@ void printGrid(std::array<std::array<Cell, rows>, columns>& grid, coordinate& p,
 
 void moveAround(coordinate& p, std::array<std::array<Cell, rows>, columns>& grid) {
 
-    bool CanMoveUp    = grid[std::clamp(p.x - stepSize, 0, trueRowLength)][p.y].id != 3;
-    bool CanMoveDown  = grid[std::clamp(p.x + stepSize, 0, trueRowLength)][p.y].id != 3;
-    bool CanMoveLeft  = grid[p.x][std::clamp(p.y - stepSize, 0, trueColLength)].id != 3;
-    bool CanMoveRight = grid[p.x][std::clamp(p.y + stepSize, 0, trueColLength)].id != 3;
+    bool CanMoveUp    = grid[std::clamp(p.x - stepSize, 0, trueRowLength)][p.y].type != WALL;
+    bool CanMoveDown  = grid[std::clamp(p.x + stepSize, 0, trueRowLength)][p.y].type != WALL;
+    bool CanMoveLeft  = grid[p.x][std::clamp(p.y - stepSize, 0, trueColLength)].type != WALL;
+    bool CanMoveRight = grid[p.x][std::clamp(p.y + stepSize, 0, trueColLength)].type != WALL;
 
     if (placeWalls) {
         int c = _getch();
@@ -159,21 +152,25 @@ void moveAround(coordinate& p, std::array<std::array<Cell, rows>, columns>& grid
             case  KeyBindings::Up:
                 if (CanMoveUp) {
                     p.moveUpNormal();
+                    grid[p.x][p.y].type = PLAYER;
                 }
                 break;
             case  KeyBindings::Down:
                 if (CanMoveDown) {
                     p.moveDownNormal();
+                    grid[p.x][p.y].type = PLAYER;
                 }
                 break;
             case  KeyBindings::Left:
                 if (CanMoveLeft) {
                     p.moveLeftNormal();
+                    grid[p.x][p.y].type = PLAYER;
                 }
                 break;
             case  KeyBindings::Right:
                 if (CanMoveRight) {
                     p.moveRightNormal();
+                    grid[p.x][p.y].type = PLAYER;
                 }
                 break;
             }
@@ -219,11 +216,12 @@ void moveCursor(std::array<std::array<Cell, rows>, columns>& grid, coordinate& c
         }
         else if (c == KeyBindings::Space) {
             if (!arrayTraverer.compareValue(goal) && !arrayTraverer.compareValue(playerPos)) {
-                grid[arrayTraverer.x][arrayTraverer.y].id = wall;
+                grid[arrayTraverer.x][arrayTraverer.y].type = WALL;
             }
         }
         else if (c == KeyBindings::Enter[0] || c == KeyBindings::Enter[1]) {
             placeWalls = true;
+            gotoxy(0, rows + 2);
         }
         else if (c == KeyBindings::Escape) {
             exitProgram();
@@ -247,7 +245,7 @@ bool checkPosition(coordinate& p, coordinate& g) {
 // p should be less than the (minimum cost of taking one step) / (expected maximum path length)
 
 /*
-* This Will cause the heuristic to prefer stright lines over the curves
+* This Will cause the heuristic to prefer straight lines over the curves
 * dx1 = current.x - goal.x
 * dy1 = current.y - goal.y
 * dx2 = start.x - goal.x
@@ -273,8 +271,35 @@ std::vector<coordinate> neighbors(coordinate& node, std::array<std::array<Cell, 
     return results;
 }
 
-void aStarSearch(coordinate& p, coordinate& g, std::array<std::array<int, rows>, columns>& grid) {
+void aStarSearch(coordinate& p, coordinate& g, std::array<std::array<Cell, rows>, columns>& grid) {
+    // OPEN = priority queue containing START
 
+    std::list<Cell> open{grid[p.x][p.y]};
+
+    // CLOSED = empty set
+    std::list<Cell> closed{};
+
+
+    // while lowest rank in OPEN is not the GOAL:
+    while (!open.empty()) {
+        auto current = 0;
+        // current = remove lowest rank item from OPEN
+        // add current to CLOSED
+
+        /*
+        for neighbors of current:
+        cost = g(current) + movementcost(current, neighbor)
+        if neighbor in OPEN and cost less than g(neighbor):
+        remove neighbor from OPEN, because new path is better
+        if neighbor in CLOSED and cost less than g(neighbor): ⁽²⁾
+        remove neighbor from CLOSED
+        if neighbor not in OPEN and neighbor not in CLOSED:
+        set g(neighbor) to cost
+        add neighbor to OPEN
+        set priority queue rank to g(neighbor) + h(neighbor)
+        set neighbor's parent to current
+        */
+    }
 }
 
 
@@ -283,21 +308,42 @@ int main()
     if (checkOS() == 0) {
         bool play{ true };
         srand(time(0));
-
+        
         std::array<std::array<Cell, rows>, columns> grid = {}; // Maze Grid
-
         coordinate playerPos{ 0, 0 };
         coordinate goal{ rand() % rows, rand() % columns };
         coordinate cursorLoc{ consoleStepSize, 0 };
         coordinate arrayTraverser{ 0, 0 };
 
+
+        int tracker = 0;
+        for (int i = 0; i < grid.size(); i++) {
+            for (int j = 0; j < grid[0].size(); j++) {
+                grid[i][j].id = tracker;
+                tracker++;
+                grid[i][j].loc.x = i;
+                grid[i][j].loc.y = j;
+
+                if (playerPos.x == grid[i][j].loc.x && playerPos.x == grid[i][j].loc.y) {
+                    grid[i][j].type = PLAYER;
+                }
+                else if(goal.x == grid[i][j].loc.x && goal.y == grid[i][j].loc.y){
+                    grid[i][j].type = GOAL;
+                }
+                else {
+                    grid[i][j].type = EMPTY;
+                }
+            }
+        }
+
+
         while (play) {
             if (!checkPosition(playerPos, goal)) break;
             system("cls");
-            printGrid(grid, playerPos, goal);
+            printGrid(grid);
             gotoxy(cursorLoc.x, cursorLoc.y);
             moveCursor(grid, cursorLoc, arrayTraverser, goal, playerPos);
-            //aStarSearch(playerPos, goal, grid);
+            aStarSearch(playerPos, goal, grid);
             moveAround(playerPos, grid);
         }
         
