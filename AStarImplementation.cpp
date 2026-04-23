@@ -94,7 +94,7 @@ struct Cell {
     int id{ 0 };
     CellType type{ EMPTY };
     coordinate loc{};
-    int weight{ 1 };
+    int weight{ 1 }; 
     int g{ 10000 };
     int f{ 0 };
     coordinate parent{ -1, -1 };
@@ -357,7 +357,7 @@ std::vector<coordinate> aStarSearch(coordinate& p, coordinate& g, std::array<std
     // start node's parent is {-1, -1}
     while (curr.x != -1 && curr.y != -1) {
         path.push_back(curr);
-        if (curr == p) break; // break once we reach start
+        //  if (curr == p) break; // break once we reach start
         curr = grid[curr.x][curr.y].parent;
     }
     // Reverse so it goes start -> end
@@ -411,10 +411,10 @@ int main()
                 path = aStarSearch(playerPos, goal, grid); 
                 play = false;
             }
-            moveAround(playerPos, grid);
+            // moveAround(playerPos, grid);
         }
 
-        if (path.size() == 0) {
+        if (path.size() <= 1) {
             std::cout << "No Path Found";
         }
         else {
